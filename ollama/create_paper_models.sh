@@ -1,4 +1,8 @@
 #!/bin/bash
+# === NOT PART OF UPSTREAM (yuxi120407/AutoSizer) ===
+# Added by us (jimlin2004 fork, branch slm-clean-base) for running the local-SLM baseline.
+# Upstream has no equivalent; nothing else in the repo depends on this file.
+# ====================================================
 # Create "-paper" variants of the pulled Ollama models with the paper's sampling
 # setting (AutoSizer Sec. 4.1: temperature 0.4, top-p 0.85, top-k 20).
 # Ollama's OpenAI-compatible /v1 endpoint ignores top_k sent in a request, so the
