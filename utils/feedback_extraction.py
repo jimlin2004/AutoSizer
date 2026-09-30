@@ -1181,8 +1181,13 @@ def check_user_specs_met(design_dict: dict, user_specs: str, verbose: bool = Fal
     if not user_specs:
         return False
     
-    # Extract all constraints: metric operator value
-    pattern = r'(\w+)\s*([><=]+)\s*([\d.]+)'
+    # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+    # Extract all constraints: metric operator value. Value class includes
+    # -/+/e so negative and scientific-notation thresholds (e.g.
+    # "bpf_peak_gain_db > -10") aren't silently dropped from the match -
+    # matches parse_user_specs()'s pattern in iterative_ota_optimization_test.py.
+    pattern = r'(\w+)\s*([><=]+)\s*([\d.e+-]+)'
+    # === PATCH END ===
     constraints = re.findall(pattern, user_specs)
     
     if not constraints:

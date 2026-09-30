@@ -10,3 +10,5 @@ run_azc_only.sh
 run_rerun_3.sh
 run_gemini_2_5_flash_new.sh
 rerun_failed.sh
+
+.claude/

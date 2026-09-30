@@ -183,9 +183,30 @@ class AdvancedSearchMethods:
         for var, val in zip(self.optimizable_vars, optimizable_values):
             value_dict[var] = val
         
-        # Add fixed values
+        # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+        # Add fixed values - validated against the variable's declared legal
+        # range first. This does NOT paper over a bad LLM decision (e.g.
+        # fixing a capacitor at C1=0.0, physically invalid) by silently
+        # substituting a legal value and continuing - that would erase the
+        # failure from the data. It still fails the run, same as before,
+        # just with a clear reason attached instead of a bare
+        # ZeroDivisionError several stack frames deep inside the simulator.
         for var, val in self.variables_fixed.items():
+            if var in self.all_var_names:
+                try:
+                    legal_values = self._get_var_value_list(var)
+                except ValueError:
+                    legal_values = None
+                if legal_values and not any(
+                    math.isclose(val, lv, rel_tol=1e-9, abs_tol=1e-18) for lv in legal_values
+                ):
+                    raise ValueError(
+                        f"LLM fixed '{var}' at {val!r}, which is not in its declared "
+                        f"legal range {legal_values} - refusing to simulate an invalid "
+                        f"design instead of letting it fail deep inside the simulator."
+                    )
             value_dict[var] = val
+        # === PATCH END ===
 
         # For any variable not in optimize or fixed, use middle value from its range
         for var in self.all_var_names:

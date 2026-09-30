@@ -248,6 +248,19 @@ class LLMOptimizationAgent:
                 base_url=endpoint,
                 api_key=api_key
             )
+        # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+        elif model.startswith("qwen") or model.startswith("ollama:"):
+            # Local model served by Ollama (OpenAI-compatible endpoint). No
+            # structured-output/schema handling here by design - _generate_content()
+            # below is left untouched, so the model gets the same plain
+            # chat-completion call as every other OpenAI-compatible model above.
+            from openai import OpenAI
+            base_url = os.getenv("OLLAMA_BASE_URL") or self.config.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+            self.client = OpenAI(
+                base_url=base_url,
+                api_key="ollama"  # Ollama ignores the key but the client requires a non-empty string
+            )
+        # === PATCH END ===
         else:
             raise ValueError(f"Unsupported model: {model}")
 
@@ -270,6 +283,13 @@ class LLMOptimizationAgent:
                 "temperature": 0.4,
                 "max_tokens": 16384,  # Increased for longer responses
             }
+            # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+            if model.startswith("qwen") or model.startswith("ollama:"):
+                # Paper setting (Sec. 4.1): max 8192 output tokens. top_p=0.85 / top_k=20
+                # are NOT passed here: Ollama's /v1 endpoint ignores top_k, so they are
+                # baked into the model via ollama/create_paper_models.sh instead.
+                self.generation_config["max_tokens"] = 8192
+            # === PATCH END ===
             self.model = None  # OpenAI-compatible models don't use GenerativeModel
 
 
