@@ -1,4 +1,4 @@
-pdk_lib_path: "/path/to/skywater-pdk/sky130.lib.spice"
+pdk_lib_path: "/mnt/HDD4/JimLin/pdks/sky130A/libs.tech/ngspice/sky130.lib.spice"
 align_pdk_path: "/path/to/ALIGN-pdk-sky130/SKY130_PDK/"
 pex_script_path: "./test_magic_pex.py"
 results_dir: "./resistive_load_amp_test_folder/fom_test_new"
