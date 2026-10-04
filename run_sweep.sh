@@ -7,13 +7,22 @@
 # Paper setting: 3 trials/circuit (main.py). For local Ollama models use the "-paper"
 # variants (see ollama/create_paper_models.sh), e.g. qwen3:32b-paper.
 #
-# Usage (activate your conda env first): bash run_sweep.sh <model> [n_parts=2] [out_dir]
+# Usage (activate your conda env first): bash run_sweep.sh <model> [n_parts=2] [out_dir] [max_tokens=32768]
 #   bash run_sweep.sh qwen3:32b-paper
 #   bash run_sweep.sh qwen2.5:32b-paper 3
 #   bash run_sweep.sh qwen3:32b-paper 2 ./results/baseline/qwen3-32b-paper
+#   bash run_sweep.sh qwen3:4b-thinking-paper 2 "" 8192    # paper-faithful token limit
+# max_tokens (per-LLM-call output limit, thinking tokens included) defaults to 32768 so that it does
+# not bind and models are compared on ability. The paper text says 8192 (upstream's own Gemini path
+# uses 65536); pass 8192 to reproduce that. It must stay below the model's context minus the prompt
+# (~3-9k tokens): qwen3:32b has a 40960 context, so use <= 24576 there. This script hands the value
+# to the python code through AUTOSIZER_MAX_TOKENS (you never set it yourself). Check afterwards that
+# no call hit the limit: grep -h "Tokens - Input" <out_dir>/part*/run.log  (Output == max_tokens).
+# Earlier baseline runs in results/baseline/ used 8192.
 #
 # Output: <out_dir>/part<i>/ (results + run.log together; one dir per part, so the summary
-# JSONs don't race). out_dir defaults to ./results/<model with ':' -> '-'>.
+# JSONs don't race). out_dir defaults to ./results/<model with ':' -> '-'>_mt<max_tokens>
+# (no suffix when max_tokens is the paper's 8192).
 # Re-running the same command resumes: circuits already SUCCESS in a part's summary JSON
 # are skipped, so keep n_parts AND out_dir the same when resuming.
 # Circuits are split by paper difficulty (Easy=1, Med=2, Hard=3) to balance the load.
@@ -22,13 +31,19 @@ cd "$(dirname "$0")"
 
 MODEL=$1
 NPARTS=${2:-2}
-[ -z "$MODEL" ] && { echo "usage: bash run_sweep.sh <model> [n_parts=2] [out_dir]"; exit 1; }
+[ -z "$MODEL" ] && { echo "usage: bash run_sweep.sh <model> [n_parts=2] [out_dir] [max_tokens]"; exit 1; }
+MT=${4:-32768}
+[[ $MT =~ ^[0-9]+$ ]] || { echo "max_tokens must be a positive integer, got '$MT'"; exit 1; }
+export AUTOSIZER_MAX_TOKENS=$MT
+if [ "$MT" != 8192 ]; then echo "NOTE: max_tokens=$MT (paper text says 8192)"; fi
 # Uses whatever `python` is active: activate your conda env first (needs ngspice + openai).
 command -v ngspice >/dev/null || { echo "ngspice not found on PATH - activate your conda env first"; exit 1; }
 python -c "import openai" 2>/dev/null || { echo "python cannot import openai - activate your conda env first"; exit 1; }
 [[ $MODEL == qwen* && $MODEL != *-paper ]] && echo "WARNING: '$MODEL' has no -paper suffix, so the paper sampling (top_p/top_k) is NOT applied"
 
-OUT=${3:-./results/${MODEL//:/-}}
+SUFFIX=""
+if [ "$MT" != 8192 ]; then SUFFIX="_mt$MT"; fi   # non-paper limits get a _mt<N> suffix
+OUT=${3:-./results/${MODEL//:/-}$SUFFIX}
 BENCH=AMS-SizingBench
 
 weight() {

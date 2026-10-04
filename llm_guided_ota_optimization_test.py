@@ -288,7 +288,12 @@ class LLMOptimizationAgent:
                 # Paper setting (Sec. 4.1): max 8192 output tokens. top_p=0.85 / top_k=20
                 # are NOT passed here: Ollama's /v1 endpoint ignores top_k, so they are
                 # baked into the model via ollama/create_paper_models.sh instead.
-                self.generation_config["max_tokens"] = 8192
+                # Default 32768: large enough not to bind, so models are compared on ability and
+                # not on how short they think (the paper text says 8192, but upstream's own
+                # Gemini path uses 65536). run_sweep.sh passes its max_tokens argument through
+                # AUTOSIZER_MAX_TOKENS; pass 8192 there for the paper-faithful setting.
+                self.generation_config["max_tokens"] = int(os.environ.get("AUTOSIZER_MAX_TOKENS", 32768))
+                print(f"[max_tokens] {self.generation_config['max_tokens']} (paper text: 8192; upstream Gemini path: 65536)")
             # === PATCH END ===
             self.model = None  # OpenAI-compatible models don't use GenerativeModel
 
