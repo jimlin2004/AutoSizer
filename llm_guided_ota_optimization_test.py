@@ -36,6 +36,12 @@ from problem_agent_test import CIRCUIT_UNDERSTANDING_PROMPT, SEARCH_SPACE_REDUCT
 from utils.feedback_extraction import (extract_optimization_feedback, save_feedback_json, 
                                       prepare_format_params, extract_useful_section, check_user_specs_met)
 
+# === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+# Switch set by main.py from the --save-thinking flag; when True, _generate_content() writes every
+# LLM call (prompt, reply, thinking text) to <trial results dir>/thinking_log.jsonl.
+SAVE_THINKING = False
+# === PATCH END ===
+
 NAME_ALIASES = {
     "dc_gain_db": "DC Gain",
     "fom": "Figure of Merit",
@@ -249,8 +255,9 @@ class LLMOptimizationAgent:
                 api_key=api_key
             )
         # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
-        elif model.startswith("qwen") or model.startswith("ollama:"):
-            # Local model served by Ollama (OpenAI-compatible endpoint). No
+        elif model.startswith("qwen") or model.startswith("ollama:") or model.startswith("local:"):
+            # Local model served by Ollama or vLLM (OpenAI-compatible endpoint); the name is sent to the
+            # server unchanged, so it must equal the server's model name. No
             # structured-output/schema handling here by design - _generate_content()
             # below is left untouched, so the model gets the same plain
             # chat-completion call as every other OpenAI-compatible model above.
@@ -284,7 +291,7 @@ class LLMOptimizationAgent:
                 "max_tokens": 16384,  # Increased for longer responses
             }
             # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
-            if model.startswith("qwen") or model.startswith("ollama:"):
+            if model.startswith("qwen") or model.startswith("ollama:") or model.startswith("local:"):
                 # Paper setting (Sec. 4.1): max 8192 output tokens. top_p=0.85 / top_k=20
                 # are NOT passed here: Ollama's /v1 endpoint ignores top_k, so they are
                 # baked into the model via ollama/create_paper_models.sh instead.
@@ -367,6 +374,32 @@ class LLMOptimizationAgent:
 
             # Track usage
             self._log_token_usage(input_tokens, output_tokens, total, call_description)
+
+            # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+            # Optional recording of every LLM call for analysis (--save-thinking). It only writes a file
+            # (one JSON line per call) and does not change what the pipeline does with the reply.
+            if SAVE_THINKING:
+                try:
+                    msg = response.choices[0].message
+                    extra = getattr(msg, "model_extra", None) or {}
+                    # vLLM (--reasoning-parser) and Ollama return the thinking text in a separate field
+                    thinking = extra.get("reasoning") or extra.get("reasoning_content")
+                    os.makedirs(self.config['results_dir'], exist_ok=True)
+                    with open(os.path.join(self.config['results_dir'], 'thinking_log.jsonl'), 'a') as rec:
+                        rec.write(json.dumps({
+                            "call_number": self.api_call_count,
+                            "description": call_description,
+                            "model": self.model_name,
+                            "finish_reason": response.choices[0].finish_reason,
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "prompt": prompt,
+                            "thinking": thinking,
+                            "content": msg.content,
+                        }, ensure_ascii=False) + "\n")
+                except Exception as e:
+                    print(f"  [save-thinking] could not write thinking_log.jsonl: {e}")
+            # === PATCH END ===
 
             # Create a response object that mimics Gemini's structure
             class ResponseWrapper:

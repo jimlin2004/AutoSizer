@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 from llm_guided_ota_optimization_test import run_llm_guided_optimization
+import llm_guided_ota_optimization_test as llm_module  # PATCH (not upstream): for the --save-thinking switch
 from iterative_ota_optimization_test import aggregate_trial_metrics
 import copy
 import numpy as np
@@ -166,7 +167,13 @@ def main():
     parser.add_argument('--circuits', type=str, nargs='+', required=True,
                         help='"all" to run every yaml in AMS-SizingBench/, '
                              'or name:path pairs, or bare .yaml paths')
+    # === PATCH START (not in upstream yuxi120407/AutoSizer) ===
+    parser.add_argument('--save-thinking', action='store_true',
+                        help='Save every LLM call (prompt, reply, thinking text) to <trial dir>/thinking_log.jsonl. '
+                             'Only writes files; results are unchanged. Files are large, so off by default.')
+    # === PATCH END ===
     args = parser.parse_args()
+    llm_module.SAVE_THINKING = args.save_thinking  # PATCH (not upstream)
 
     # Build CIRCUIT_REGISTRY from --circuits argument
     BENCH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "AMS-SizingBench")
